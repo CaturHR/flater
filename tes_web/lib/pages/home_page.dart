@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/item_model.dart';
+import '../providers/auth_provider.dart';
 import '../providers/item_provider.dart';
+import '../repositories/item_repository.dart';
 import '../widgets/empty_state_widget.dart';
 import '../widgets/item_card.dart';
 import 'form_page.dart';
+import 'settings_page.dart';
 
 /// Halaman utama yang menampilkan daftar semua items.
 ///
@@ -17,6 +20,9 @@ import 'form_page.dart';
 /// - Tombol edit & delete pada setiap item
 /// - Konfirmasi sebelum hapus (AlertDialog)
 /// - Snackbar untuk feedback operasi CRUD
+/// - Label sumber data (Online Data / Cached Data)
+/// - Tombol logout di AppBar
+/// - Navigasi ke Settings page
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -58,6 +64,63 @@ class _HomePageState extends State<HomePage> {
         builder: (_) => FormPage(item: item),
       ),
     );
+  }
+
+  /// Navigasi ke halaman settings (pengaturan)
+  void _navigateToSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SettingsPage(),
+      ),
+    );
+  }
+
+  /// Melakukan logout dan kembali ke halaman login.
+  /// Menggunakan pushNamedAndRemoveUntil agar user tidak bisa
+  /// kembali ke home dengan tombol Back setelah logout.
+  Future<void> _handleLogout() async {
+    // Tampilkan dialog konfirmasi logout
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.logout, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Konfirmasi Logout'),
+          ],
+        ),
+        content: const Text('Apakah Anda yakin ingin keluar dari aplikasi?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout == true && mounted) {
+      // Panggil AuthProvider untuk logout
+      await context.read<AuthProvider>().logout();
+
+      if (mounted) {
+        // Navigasi ke login dan hapus semua route sebelumnya
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/login',
+          (route) => false,
+        );
+      }
+    }
   }
 
   /// Menampilkan dialog konfirmasi sebelum hapus item (DELETE)
@@ -148,10 +211,71 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  /// Membangun widget label sumber data (Online Data / Cached Data).
+  /// Label ditentukan oleh DataSource dari provider, bukan hardcode.
+  Widget _buildDataSourceLabel(DataSource source) {
+    final isOnline = source == DataSource.online;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: isOnline
+            ? Colors.green.shade50
+            : Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isOnline
+              ? Colors.green.shade200
+              : Colors.orange.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isOnline ? Icons.cloud_done_outlined : Icons.cached,
+            size: 20,
+            color: isOnline ? Colors.green.shade700 : Colors.orange.shade700,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isOnline ? 'Online Data' : 'Cached Data',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: isOnline
+                        ? Colors.green.shade800
+                        : Colors.orange.shade800,
+                  ),
+                ),
+                Text(
+                  isOnline
+                      ? '✓ data berasal dari server'
+                      : '✓ data berasal dari SharedPreferences cache',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isOnline
+                        ? Colors.green.shade600
+                        : Colors.orange.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // AppBar dengan judul aplikasi
+      // AppBar dengan judul, settings, dan logout
       appBar: AppBar(
         title: const Text(
           'CRUD Items',
@@ -165,6 +289,18 @@ class _HomePageState extends State<HomePage> {
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
             tooltip: 'Refresh data',
+          ),
+          // Tombol settings
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: _navigateToSettings,
+            tooltip: 'Pengaturan',
+          ),
+          // Tombol logout
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _handleLogout,
+            tooltip: 'Logout',
           ),
         ],
       ),
@@ -234,12 +370,15 @@ class _HomePageState extends State<HomePage> {
             onRefresh: _loadData,
             child: Column(
               children: [
+                // Label sumber data (Online Data / Cached Data)
+                _buildDataSourceLabel(provider.dataSource),
+
                 // Info jumlah data
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
-                    vertical: 12,
+                    vertical: 4,
                   ),
                   child: Text(
                     'Total: ${provider.items.length} item',

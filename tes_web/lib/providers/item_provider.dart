@@ -7,6 +7,9 @@ import '../repositories/item_repository.dart';
 /// Menggunakan ChangeNotifier dari package provider
 /// untuk reactive state management. UI akan otomatis
 /// diperbarui setiap kali notifyListeners() dipanggil.
+///
+/// Ditambahkan fitur tracking sumber data (online/cached)
+/// untuk menampilkan label di UI.
 class ItemProvider extends ChangeNotifier {
   final ItemRepository _repository;
 
@@ -26,6 +29,9 @@ class ItemProvider extends ChangeNotifier {
   /// Pesan error jika terjadi kegagalan
   String _errorMessage = '';
 
+  /// Sumber data yang sedang ditampilkan (online atau cached)
+  DataSource _dataSource = DataSource.online;
+
   // ============================================================
   // GETTERS - Akses state dari UI
   // ============================================================
@@ -42,21 +48,28 @@ class ItemProvider extends ChangeNotifier {
   /// Cek apakah ada error
   bool get hasError => _errorMessage.isNotEmpty;
 
+  /// Getter untuk sumber data (online atau cached).
+  /// Digunakan oleh UI untuk menampilkan label data source.
+  DataSource get dataSource => _dataSource;
+
   // ============================================================
   // CRUD OPERATIONS
   // ============================================================
 
-  /// READ - Mengambil semua data dari API.
+  /// READ - Mengambil semua data dari API dengan fallback ke cache.
   ///
   /// Mengatur loading state, memanggil repository,
   /// dan memperbarui UI setelah data diterima.
+  /// Repository menentukan apakah data dari online atau cache.
   Future<void> loadItems() async {
     _isLoading = true;
     _errorMessage = '';
     notifyListeners();
 
     try {
-      _items = await _repository.fetchItems();
+      final result = await _repository.fetchItems();
+      _items = result.items;
+      _dataSource = result.source;
     } catch (e) {
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
     } finally {
